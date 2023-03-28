@@ -26,6 +26,9 @@ pub fn run(_argument: String) {
         "--ignore" => skip_terminal_io(dmut_dir_path, nmut_file_name, nmut_pkg_name, nmut_dir_path),
         _ => {
             println!("{}", "See you later baby!".bold().red());
+            // Command line questions like Name: blablabla
+            // Version: 1.0.0
+            // Author: Unspecified
         }
     }
 }
