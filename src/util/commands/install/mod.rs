@@ -74,7 +74,6 @@ pub fn run(package_name: String, package_paramater: String) {
             }
         }
 
-        #[allow(unused_variables)]
         pub fn module_save(package_name: String, package_version: String, parsed_file_path: String, parsed_file_content: String) {
             #[derive(Debug, Serialize, Deserialize)]
             struct PackageJsonFileStruct {
@@ -89,6 +88,7 @@ pub fn run(package_name: String, package_paramater: String) {
 
             let merged_data = merge(&package_json, &dependencie);
 
+            // REPLACE TO_STRING_PRETTY TO PRETTY WITHOUT ORDERING [Az-AZ-az]
             fs::write(parsed_file_path, serde_json::to_string_pretty(&merged_data).unwrap().to_string()).unwrap();
 
             println!("{}: {} {}{}{} {}", "registry.npmjs.org".bold().bright_cyan(), "Added module".bold().bright_black(), package_name.clone().bold().bright_magenta(), "@".bold(), package_version.clone().to_string().bold().bright_magenta(), "to package.json".bold().bright_black());
