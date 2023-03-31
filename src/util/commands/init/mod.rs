@@ -18,8 +18,10 @@ pub fn run(_argument: String) {
         fn default_file_content(package_name: &str) -> String {
             return format!("{}\n  \"name\": \"{}\",\n  \"version\": \"1.0.0\",\n  \"author\": \"Unspecified\"\n{}", "{", package_name, "}").to_string();
         }
+
+        let serde_str: serde_json::Value = serde_json::from_str(&default_file_content(nmut_pkg_name.as_str()).to_string()).expect("package.json file was not formatted correctly!");
     
-        fs::write(dmut_dir_path + nmut_file_name, default_file_content(nmut_pkg_name.as_str()).to_string()).ok();
+        fs::write(dmut_dir_path + nmut_file_name, serde_json::to_string_pretty(&serde_str).unwrap().to_string()).ok();
         println!("{} \"{}\" {}", "Done initializing your project".bright_black().bold(), nmut_dir_path.to_string().bright_yellow().bold(), ".");
     }
 
@@ -68,7 +70,9 @@ pub fn run(_argument: String) {
                 }).collect::<String>(), package_version_input.trim(), package_author_input.trim(), "}").to_string();
             }
         
-            fs::write(dmut_dir_path + nmut_file_name, default_file_content(package_name_input, package_version_input, package_author_input).to_string()).ok();
+            let serde_str: serde_json::Value = serde_json::from_str(&default_file_content(package_name_input, package_version_input, package_author_input).clone().to_owned().as_str()).unwrap();
+
+            fs::write(dmut_dir_path + nmut_file_name, serde_json::to_string_pretty(&serde_str).unwrap().to_string()).ok();
             println!("{} \"{}\" {}", "Done initializing your project".bright_black().bold(), nmut_dir_path.to_string().bright_yellow().bold(), ".");
         }
     }
