@@ -9,6 +9,8 @@ use serde_json::{Value};
 
 use std::env;
 
+use crate::util::commands::icd;
+
 pub fn run(package_name: String, package_paramater: String) {
     let env_path = env::current_dir().unwrap().to_owned();
     
@@ -83,7 +85,7 @@ pub fn run(package_name: String, package_paramater: String) {
                 dependencies: Value
             }
             
-            let package_json: serde_json::Value = serde_json::from_str(&parsed_file_content).expect("package.json file was not formatted correctly!");
+            let package_json: serde_json::Value = serde_json::from_str(&parsed_file_content.clone()).expect("package.json file was not formatted correctly!");
             let mut dependencie: HashMap<String, Value> = HashMap::new();
             let mut package_as_hash = HashMap::new();
             let mut package_as_serde = serde_json::Map::new();
@@ -146,7 +148,7 @@ pub fn run(package_name: String, package_paramater: String) {
                 dependencies: Value
             }
             
-            let package_json: serde_json::Value = serde_json::from_str(&parsed_file_content).expect("package.json file was not formatted correctly!");
+            let package_json: serde_json::Value = serde_json::from_str(&parsed_file_content.clone()).expect("package.json file was not formatted correctly!");
             let mut dependencie: HashMap<String, Value> = HashMap::new();
             let mut package_as_hash = HashMap::new();
             let mut package_as_serde = serde_json::Map::new();
@@ -203,74 +205,89 @@ pub fn run(package_name: String, package_paramater: String) {
         }
 
         match package_paramater.as_str() {
-            "--save"     => module_save    (package_name.clone(), registry_data_latest_ver, parsed_file_path, parsed_file_content.unwrap()),
-            "--save-dev" => module_save_dev(package_name.clone(), registry_data_latest_ver, parsed_file_path, parsed_file_content.unwrap()),
-            _            => module_save    (package_name.clone(), registry_data_latest_ver, parsed_file_path, parsed_file_content.unwrap()),
+            "--save"     => module_save    (package_name.clone(), registry_data_latest_ver, parsed_file_path, parsed_file_content.unwrap().clone()),
+            "--save-dev" => module_save_dev(package_name.clone(), registry_data_latest_ver, parsed_file_path, parsed_file_content.unwrap().clone()),
+            _            => module_save    (package_name.clone(), registry_data_latest_ver, parsed_file_path, parsed_file_content.unwrap().clone()),
         }
 
         // Download data from registry_data_latest_tar
-        let tgz_package_name        = String::from(node_modules_clone.clone().to_str().unwrap().to_string() + "tmp-pkg-".to_string().as_str() + format!("{}.{}", package_name.clone().to_lowercase().to_string().chars()
+        let base_dir_name    = String::from(Path::new(&node_modules_clone.clone()).to_string_lossy().split("\\").next().unwrap().to_string() + "/.dvn-cache/".to_string().as_str()).to_string();
+        let base_dir_path = Path::new(&base_dir_name);
+        if !Path::exists(base_dir_path) {
+            #[allow(unused_must_use)] {
+                fs::create_dir_all(base_dir_path);
+            }
+        }
+        let tgz_package_path = String::from(format!("{}.{}.{}", "dpkg", package_name.clone().to_lowercase().to_string().chars()
         .map(|x| match x { 
             '/' => '-',
             _ => x
-        }).collect::<String>(), "tgz").as_str()).to_string();
-        fn data_from_registry(registry_data_latest_tar: String, tgz_package_name: String, package_name: String, node_modules_clone: String) {
-            let tgz_package_in_stream = get(registry_data_latest_tar.clone()).expect("Request failed while contacting with registry.npmjs.org tarball.");
-            let tgz_package_ostream_path = Path::new(&tgz_package_name);
-            let mut tgz_package_out_stream= File::create(tgz_package_ostream_path).expect("Could not create the file");
-            print!("[{}] | {}: {} {} {}", "/".bold().bright_green(), "registry.npmjs.org".bold().bright_cyan(), "Recieving data of".bold().bright_black(), "#".bold(), registry_data_latest_tar.clone().to_string().bold().bright_purple());
-            #[allow(unused_must_use)] {
-                tgz_package_out_stream.write_all(&tgz_package_in_stream.bytes().unwrap()).and(Ok(|| {
-                })).and(Ok(|| {
-                    print!("\r");
-                    print!("[{}] | {}: {} {} {}", "-".bold().bright_green(), "registry.npmjs.org".bold().bright_cyan(), "Recieving data of".bold().bright_black(), "#".bold(), registry_data_latest_tar.clone().to_string().bold().bright_purple())
-                })).and(Ok(|| {
-                    print!("\r");
-                    print!("[{}] | {}: {} {} {}", "\\".bold().bright_green(), "registry.npmjs.org".bold().bright_cyan(), "Recieving data of".bold().bright_black(), "#".bold(), registry_data_latest_tar.clone().to_string().bold().bright_purple())
-                })).and_then(|_| Ok({
-                    print!("\r");
-                    print!("[{}] | {}: {} {} {}", "DONE".bold().bright_green(), "registry.npmjs.org".bold().bright_cyan(), "Recieved all data of".bold().bright_black(), "#".bold(), registry_data_latest_tar.clone().to_string().bold().bright_purple())
-                })).and_then(|_| Ok({
-                    print!("\n");
-                    println!("[{}] | {}: {} {} {}", "DONWLOADED".bold().bright_green(), "registry.npmjs.org".bold().bright_cyan(), "Package".bold().bright_black(), "#".bold(), package_name.clone().to_string().bold().bright_purple());
-                    println!("[{}]  | {}: {} {} {}", "UNPACKING".bold().red(), "registry.npmjs.org".bold().bright_cyan(), "Package".bold().bright_black(), "#".bold(), package_name.clone().to_string().bold().bright_blue());
+        }).collect::<String>(), "tgz").as_str());
+        
+        fn data_from_registry(registry_data_latest_tar: String, tgz_package_name: String, package_name: String, node_modules_clone: String, base_dir_name: String) {
+            println!("[{}] | {}: {} {} {}", "/".bold().bright_green(), "registry.npmjs.org".bold().bright_cyan(), "Recieving data of".bold().bright_black(), "#".bold(), registry_data_latest_tar.clone().to_string().bold().bright_purple());
 
+            let binding = String::from(base_dir_name.clone().to_string() + tgz_package_name.clone().as_str());
+            let tgz_package_ostream_path = Path::new(&binding);
+            
+            // If the path of tgz_package doesn't exists, Just download it and do the work :)
+            if !Path::exists(tgz_package_ostream_path) {
+                #[allow(unused_must_use)] {
+                    let tgz_package_in_stream = get(registry_data_latest_tar.clone()).expect("Request failed while contacting with registry.npmjs.org tarball.");
+                    let mut tgz_package_out_stream= File::create(tgz_package_ostream_path).expect("Could not create the file");
+
+                    tgz_package_out_stream.write_all(&tgz_package_in_stream.bytes().unwrap()).and_then(|_| Ok({
+                        print!("\n");
+                        println!("[{}] | {}: {} {} {}", "DOWNLOADED".bold().bright_green(), "registry.npmjs.org".bold().bright_cyan(), "Package".bold().bright_black(), "#".bold(), package_name.clone().to_string().bold().bright_blue());
+
+                        let unpack_to_dist = String::from(node_modules_clone.clone());
+                        let unpack_to_pkgd = String::from(node_modules_clone.clone() + package_name.as_str());
+                        
+                        let tar_gz = File::open(tgz_package_ostream_path)?;
+                        let tar = GzDecoder::new(tar_gz);
+                        let mut archive = Archive::new(tar);
+                        archive.unpack(String::from(unpack_to_dist.clone()));
+                        if Path::new(&String::from(unpack_to_pkgd.clone())).exists() {
+                            fs::remove_dir_all(unpack_to_pkgd.clone());
+                            println!("[{}]    | {} {}{}", "CLEANED".bold().bright_green(), "Old Package Directory".bold().bright_cyan(), "/node_modules/".bold().bright_black(), package_name.clone().to_string().bold().bright_green());
+                        }
+                        fs::rename(unpack_to_dist + "package", unpack_to_pkgd.clone());
+                        let pfc = fs::read_to_string(String::from(node_modules_clone.clone().as_str().to_string() + package_name.clone().as_str() + "/package.json".to_string().as_str()));
+                        let pkgjson_val: serde_json::Value = serde_json::from_str(&pfc.unwrap().clone()).expect("package.json file was not formatted correctly!");
+                        icd::run(&serde_json::to_string_pretty(&pkgjson_val.clone()).unwrap(), "-od".to_string(), String::from(base_dir_name.clone()));
+                    }));
+                }
+            } else {
+                #[allow(unused_must_use)] {
                     let unpack_to_dist = String::from(node_modules_clone.clone());
                     let unpack_to_pkgd = String::from(node_modules_clone.clone() + package_name.as_str());
 
-                    let path = tgz_package_ostream_path;
-
-                    let tar_gz = File::open(path)?;
+                    let tar_gz = File::open(tgz_package_ostream_path).unwrap();
                     let tar = GzDecoder::new(tar_gz);
                     let mut archive = Archive::new(tar);
                     archive.unpack(String::from(unpack_to_dist.clone()));
-                    println!("[{}]   | {}{}", "UNPACKED".bold().bright_green(), "To Path: /node_modules/".bold().bright_cyan(), package_name.clone().to_string().bold().bright_green());
                     if Path::new(&String::from(unpack_to_pkgd.clone())).exists() {
                         fs::remove_dir_all(unpack_to_pkgd.clone());
-                        println!("[{}]    | {} {}{}", "REMOVED".bold().bright_green(), "Old Package Directory".bold().bright_cyan(), "/node_modules/".bold().bright_black(), package_name.clone().to_string().bold().bright_green());
+                        println!("[{}]    | {} {}{}", "CLEANED".bold().bright_green(), "Old Package Directory".bold().bright_cyan(), "/node_modules/".bold().bright_black(), package_name.clone().to_string().bold().bright_green());
                     }
                     fs::rename(unpack_to_dist + "package", unpack_to_pkgd.clone());
-                    fs::remove_file(path);
-                    println!("[{}] | {}", "CLEANED_UP".bold().bright_green(), "/node_modules/".bold().bright_cyan());
-                }));
+                    let pfc = fs::read_to_string(String::from(node_modules_clone.clone().as_str().to_string() + package_name.clone().as_str() + "/package.json".to_string().as_str()));
+                    let pkgjson_val: serde_json::Value = serde_json::from_str(&pfc.unwrap().clone()).expect("package.json file was not formatted correctly!");
+                    icd::run(&serde_json::to_string_pretty(&pkgjson_val.clone()).unwrap(), "-od".to_string(), base_dir_name.clone());         
+                }
             }
         }
 
         #[allow(unused_must_use)] {
-            data_from_registry(registry_data_latest_tar, tgz_package_name, package_name, node_modules_clone.clone().to_string_lossy().to_string());
+            data_from_registry(registry_data_latest_tar, tgz_package_path, package_name.clone(), node_modules_clone.clone().to_string_lossy().to_string(), String::from(base_dir_name.clone()));
         }
 
-        // Create a folder inside the node_modules on the name of the package 
-        // Donwload the package in node_modules/folder_of_the_package and extract it 
-        // Get the insider files of node_modules/folder_of_the_package/package and put it in node_modules/folder_of_the_package
-        // Remove node_modules/folder_of_the_package/package
         // Install dependencies of node_modules/folder_of_the_package
         // And cache it in the %temp%/.dvn/cached/folder_of_the_package
         // Compress node_modules/folder_of_the_package
+
         // When using "dvn run script --unpack-cached" or "dvn script -u-c" it 
         // will unpack the compressed folder then it will run node process in the background
-        // Then add it as a (dev or not) dependencie(s) in package.json
-        // If no package.json then just alert the user 🤷‍♂️
 
     }
 }
